@@ -1,0 +1,42 @@
+# Environment and secrets
+.env
+*.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation and tests
+*.md
+test_*.py
+SOLUTION_SUMMARY.md
+QUICK_START.md
+VALIDATION_AND_FLOW_SUMMARY.md
+USER_FLOW.md
+EMAIL_VALIDATION_SUMMARY.md
+
+# Kubernetes files (not needed in image)
+k8s/
+*.yaml
+*.yml
+
+# Logs
+*.log
