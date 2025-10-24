@@ -24,6 +24,7 @@ COPY --from=builder /root/.local /root/.local
 
 # Make sure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/root/.local/lib/python3.11/site-packages:$PYTHONPATH
 
 # Copy application code
 COPY main.py .
@@ -31,7 +32,8 @@ COPY cloudflare_access.py .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 -s /bin/false botuser && \
-    chown -R botuser:botuser /app
+    chown -R botuser:botuser /app && \
+    chown -R botuser:botuser /root/.local
 
 # Remove unnecessary packages for security
 RUN apt-get update && apt-get purge -y --auto-remove \
