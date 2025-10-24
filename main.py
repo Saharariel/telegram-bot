@@ -609,9 +609,10 @@ You'll be asked to:
 async def send_jellyfin_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send instructions for accessing Jellyfin."""
     username = context.user_data.get('username')
+    email = context.user_data.get('email')
 
     jellyfin_instructions = f"""
-🎬 **Welcome to Jellyfin!**
+🎬 **Welcome to the Media Server!**
 
 Your 2FA is now set up! You can access the media server:
 
@@ -619,22 +620,32 @@ Your 2FA is now set up! You can access the media server:
 
 **Your Credentials:**
 • Username: `{username}`
-• Password: The password you created earlier
+• Email: `{email}`
+• Password Format: `<your-password>;<totp-code>`
 
-**Login Steps:**
+**Step 1: Cloudflare Access Authentication**
+Before accessing Jellyfin, you must pass through Cloudflare Access:
+
 1. Open {JELLYFIN_URL} in your browser
-2. Click "Sign In"
-3. Enter your username and password
-4. Enter the 6-digit code from your authenticator app
+2. You will be redirected to Cloudflare Access login
+3. Enter your email: `{email}`
+4. A one-time PIN will be sent to your email
+5. Check your email and enter the one-time PIN
+6. You will be granted access to Jellyfin
 
-**Apps Available:**
-• Web browser (any device)
-• Android: Jellyfin app from Play Store
-• iOS: Jellyfin app from App Store
-• Android TV / Fire TV / Roku / etc.
+**Step 2: Jellyfin Login**
+After passing Cloudflare Access:
+
+1. You will be redirected to Jellyfin
+2. Click "Sign In"
+3. Enter your username: `{username}`
+4. For the password field, enter: `<your-password>;<6-digit-totp-code>`
+   (Example: `MyPassword123;456789`)
+   - Replace `<your-password>` with your actual password
+   - Replace `<6-digit-totp-code>` with the current code from your authenticator app
 
 **Need Help?**
-Contact the administrator if you have any issues.
+Fuck you
 
 Enjoy your media! 🍿
 """
@@ -659,7 +670,6 @@ async def totp_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     else:
         await update.message.reply_text(
             "⏳ Please type 'done' when you've finished setting up 2FA.\n\n"
-            "If you need help, contact an administrator.\n"
             "To cancel, use /cancel"
         )
         return TOTP_CONFIRM
