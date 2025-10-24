@@ -1,14 +1,20 @@
 #!/bin/bash
 
+# Local build script for development
+# For CI/CD, GitHub Actions will handle the build and push
+
+set -e  # Exit on error
+
 # Configuration
-REGISTRY="your-registry.example.com"  # Change this to your private registry
+REGISTRY="ghcr.io"
+USERNAME="${GITHUB_ACTOR:-$(git config user.name)}"
 IMAGE_NAME="telegram-bot"
-TAG="${1:-latest}"  # Use argument or default to 'latest'
+TAG="${1:-latest}"
 
-FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${TAG}"
+FULL_IMAGE="${REGISTRY}/${USERNAME}/${IMAGE_NAME}:${TAG}"
 
-echo "Building Docker image..."
-echo "Image: ${FULL_IMAGE}"
+echo "🔨 Building Docker image locally..."
+echo "📦 Image: ${FULL_IMAGE}"
 echo ""
 
 # Build the image
@@ -18,24 +24,15 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "✅ Build successful!"
     echo ""
-    echo "Pushing to registry..."
-    docker push "${FULL_IMAGE}"
-
-    if [ $? -eq 0 ]; then
-        echo ""
-        echo "✅ Push successful!"
-        echo ""
-        echo "Image available at: ${FULL_IMAGE}"
-        echo ""
-        echo "To run locally:"
-        echo "  docker run --env-file .env ${FULL_IMAGE}"
-    else
-        echo ""
-        echo "❌ Push failed!"
-        echo "Make sure you're logged in to your registry:"
-        echo "  docker login ${REGISTRY}"
-        exit 1
-    fi
+    echo "To push to GHCR:"
+    echo "  docker login ghcr.io -u ${USERNAME}"
+    echo "  docker push ${FULL_IMAGE}"
+    echo ""
+    echo "To run locally:"
+    echo "  docker run --env-file .env ${FULL_IMAGE}"
+    echo ""
+    echo "Note: Push will happen automatically via GitHub Actions when you:"
+    echo "  git push"
 else
     echo ""
     echo "❌ Build failed!"
