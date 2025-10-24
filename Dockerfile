@@ -21,8 +21,11 @@ COPY --from=builder /tmp/build/packages /app/packages
 ENV PYTHONPATH=/app/packages:$PYTHONPATH
 
 # Copy application code
-COPY main.py .
-COPY cloudflare_access.py .
+COPY bot/ ./bot/
+COPY run.py .
+
+# Create a placeholder for environment variables (actual config should be provided at runtime)
+ENV PYTHONUNBUFFERED=1
 
 # Create non-root user for security
 RUN useradd -m -u 1000 -s /bin/false botuser && \
@@ -38,7 +41,7 @@ USER botuser
 
 # Health check (optional - checks if bot is running)
 HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
-    CMD pgrep -f "python.*main.py" || exit 1
+    CMD pgrep -f "python.*run.py" || exit 1
 
-# Run the bot
-CMD ["python", "-u", "main.py"]
+# Run the bot with the new entry point
+CMD ["python", "-u", "run.py"]
