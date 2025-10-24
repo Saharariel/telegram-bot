@@ -2,16 +2,11 @@
 # Stage 1: Builder
 FROM python:3.11-slim as builder
 
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /tmp/build
 
 # Copy and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -t /tmp/build/packages -r requirements.txt
 
 # Stage 2: Runtime (hardened)
 FROM python:3.11-slim
@@ -20,11 +15,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /tmp/build/packages /app/packages
 
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
-ENV PYTHONPATH=/root/.local/lib/python3.11/site-packages:$PYTHONPATH
+# Add packages to Python path
+ENV PYTHONPATH=/app/packages:$PYTHONPATH
 
 # Copy application code
 COPY main.py .
@@ -32,8 +26,7 @@ COPY cloudflare_access.py .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 -s /bin/false botuser && \
-    chown -R botuser:botuser /app && \
-    chown -R botuser:botuser /root/.local
+    chown -R botuser:botuser /app
 
 # Remove unnecessary packages for security
 RUN apt-get update && apt-get purge -y --auto-remove \
