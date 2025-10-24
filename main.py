@@ -47,6 +47,7 @@ logger.info(f"Loaded AUTHENTIK_API_TOKEN: {'Yes' if AUTHENTIK_API_TOKEN else 'No
 logger.info(f"Loaded JELLYFIN_URL: {JELLYFIN_URL[:30] if JELLYFIN_URL else 'No'}...")
 logger.info(f"Loaded BOT_PASSWORD: {'Yes' if BOT_ACCESS_PASSWORD else 'No (bot is public!)'}")
 
+
 # Authentik API headers
 HEADERS = {
     'Authorization': f'Bearer {AUTHENTIK_API_TOKEN}',
@@ -301,6 +302,70 @@ async def password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
 
 
+async def add_user_to_group(user_pk: int, group_name: str = "Jellyfin Users") -> bool:
+    """Add user to a group in Authentik."""
+    try:
+        # Step 1: Get the group by name
+        logger.info(f"Looking up group '{group_name}'...")
+        groups_response = requests.get(
+            f"{AUTHENTIK_URL}/api/v3/core/groups/?search={group_name}",
+            headers=HEADERS,
+            timeout=10
+        )
+
+        if groups_response.status_code != 200:
+            logger.warning(f"Failed to fetch groups: {groups_response.status_code}")
+            return False
+
+        groups = groups_response.json().get('results', [])
+
+        # Find group with exact name match
+        group_pk = None
+        group_data = None
+        for group in groups:
+            if group.get('name', '').lower() == group_name.lower():
+                group_pk = group.get('pk')
+                group_data = group
+                break
+
+        if not group_pk:
+            logger.warning(f"Group '{group_name}' not found in Authentik")
+            return False
+
+        logger.info(f"Found group '{group_name}' with pk={group_pk}")
+
+        # Step 2: Get current users in the group
+        current_users = group_data.get('users', [])
+        logger.info(f"Current users in group: {current_users}")
+
+        # Check if user is already in group
+        if user_pk in current_users:
+            logger.info(f"User {user_pk} is already in group '{group_name}'")
+            return True
+
+        # Step 3: Add user to group by PATCH request with updated user list
+        updated_users = current_users + [user_pk]
+        logger.info(f"Adding user {user_pk} to group '{group_name}'...")
+
+        patch_response = requests.patch(
+            f"{AUTHENTIK_URL}/api/v3/core/groups/{group_pk}/",
+            json={"users": updated_users},
+            headers=HEADERS,
+            timeout=10
+        )
+
+        if patch_response.status_code in [200, 204]:
+            logger.info(f"Successfully added user {user_pk} to group '{group_name}'")
+            return True
+        else:
+            logger.warning(f"Failed to add user to group: {patch_response.status_code} - {patch_response.text}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error adding user to group: {str(e)}", exc_info=True)
+        return False
+
+
 async def check_email_exists(email: str) -> bool:
     """Check if an email is already registered in Authentik."""
     try:
@@ -538,6 +603,21 @@ async def create_authentik_user(update: Update, context: ContextTypes.DEFAULT_TY
 
         await update.message.reply_text("✅ User account created!")
 
+        # Add user to Jellyfin Users group
+        logger.info(f"Adding user {username} to Jellyfin Users group...")
+        group_success = await add_user_to_group(user_pk, "Jellyfin Users")
+        if group_success:
+            logger.info(f"Successfully added {username} to Jellyfin Users group")
+            await update.message.reply_text(
+                "✅ Added to Jellyfin Users group!"
+            )
+        else:
+            logger.warning(f"Failed to add {username} to Jellyfin Users group (non-critical)")
+            await update.message.reply_text(
+                "⚠️ Note: Could not automatically add you to Jellyfin Users group.\n"
+                "Please contact the administrator to be added manually."
+            )
+
         # Add email to Cloudflare Access policy (if configured)
         if CLOUDFLARE_ENABLED:
             logger.info(f"Adding {email} to Cloudflare Access policy...")
@@ -576,26 +656,40 @@ async def send_totp_instructions(update: Update, context: ContextTypes.DEFAULT_T
     username = context.user_data.get('username')
 
     totp_instructions = f"""
-🔐 **Set Up Two-Factor Authentication**
+�� **Set Up Two-Factor Authentication**
 
-Before you can access Jellyfin, you need to set up 2FA:
+Before you can access Jellyfin, you need to set up 2FA (TOTP):
 
 **Step 1: Install an Authenticator App**
-Download this app on your phone:
+Download one of these apps on your phone:
 • Google Authenticator (Android/iOS)
+• Microsoft Authenticator (Android/iOS)
+• Authy (Android/iOS)
+• FreeOTP (Android/iOS)
 
-**Step 2: Enroll Your Device**
-Click this link to set up TOTP:
-{AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/
+**Step 2: Log In to Authentik**
+First, you need to log in to your account:
+🔗 {AUTHENTIK_URL}
 
-You'll be asked to:
-1. Log in with your credentials
-2. Scan a QR code with your authenticator app
-3. Enter a code to verify it works
-
-**Your Login Credentials:**
+Use these credentials:
 • Username: `{username}`
 • Password: The password you just created
+
+**Step 3: Enroll Your Authenticator**
+After logging in, click this link to set up TOTP:
+🔗 {AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/
+
+You'll be asked to:
+1. Scan a QR code with your authenticator app
+2. Enter the 6-digit code to verify it works
+3. The setup is complete!
+
+**Summary:**
+1️⃣ Log in: {AUTHENTIK_URL}
+2️⃣ Set up TOTP: {AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/
+3️⃣ Type 'done' below when finished
+
+**Important:** Keep your authenticator app safe - you'll need it every time you log in!
 """
 
     await update.message.reply_text(totp_instructions, parse_mode='Markdown')
@@ -644,8 +738,18 @@ After passing Cloudflare Access:
    - Replace `<your-password>` with your actual password
    - Replace `<6-digit-totp-code>` with the current code from your authenticator app
 
+**Apps Available:**
+• Web browser (any device)
+• Android: Jellyfin app from Play Store
+• iOS: Jellyfin app from App Store
+• Android TV / Fire TV / Roku / etc.
+
+**Security Summary:**
+🔒 Cloudflare Access: Email + One-Time PIN
+🔒 Jellyfin Login: Username + Password;TOTP format
+
 **Need Help?**
-Fuck you
+Contact the administrator if you have any issues.
 
 Enjoy your media! 🍿
 """
@@ -709,10 +813,18 @@ def main():
     )
     
     application.add_handler(conv_handler)
-    
-    # Start the bot
+
+    # Start the bot with optimized polling
     logger.info("Bot started...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Polling parameters:
+    # - poll_interval: seconds between polling requests (default 0, meaning continuous)
+    # - timeout: how long to wait for updates (long polling, reduces requests)
+    # - allowed_updates: only listen for message and command updates (not all update types)
+    application.run_polling(
+        poll_interval=1.0,  # Wait 1 second between polls
+        timeout=30,  # Long polling timeout (server holds connection for 30 seconds)
+        allowed_updates=[Update.MESSAGE, Update.CALLBACK_QUERY]
+    )
 
 
 if __name__ == '__main__':
