@@ -3,7 +3,7 @@
 # Local build script for development
 # For CI/CD, GitHub Actions will handle the build and push
 
-set -e  # Exit on error
+set -e # Exit on error
 
 # Configuration
 REGISTRY="ghcr.io"
@@ -21,20 +21,21 @@ echo ""
 docker build -t "${FULL_IMAGE}" .
 
 if [ $? -eq 0 ]; then
-    echo ""
-    echo "✅ Build successful!"
-    echo ""
-    echo "To push to GHCR:"
-    echo "  docker login ghcr.io -u ${USERNAME}"
-    echo "  docker push ${FULL_IMAGE}"
-    echo ""
-    echo "To run locally:"
-    echo "  docker run --env-file .env ${FULL_IMAGE}"
-    echo ""
-    echo "Note: Push will happen automatically via GitHub Actions when you:"
-    echo "  git push"
+  echo ""
+  echo "✅ Build successful!"
+  echo ""
+  echo "To push to GHCR:"
+  echo "  docker login ghcr.io -u ${USERNAME}"
+  echo "  docker push ${FULL_IMAGE}"
+  echo ""
+  echo "To run locally:"
+  echo "  docker run --env-file .env ${FULL_IMAGE}"
+  echo ""
+  echo "Note: Push will happen automatically via GitHub Actions when you:"
+  echo "  git push"
 else
-    echo ""
-    echo "❌ Build failed!"
-    exit 1
+  echo ""
+  echo "❌ Build failed!"
+  exit 1
 fi
+
