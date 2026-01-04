@@ -3,7 +3,7 @@
 import logging
 import authentik_client
 from authentik_client.rest import ApiException
-from authentik_client.models import UserRequest, UserPasswordSetRequest
+from authentik_client.models import UserRequest, UserPasswordSetRequest, UserAccountRequest
 from bot.utils.config import AUTHENTIK_URL, AUTHENTIK_API_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,8 @@ async def add_user_to_group(user_pk: int, group_name: str = "Jellyfin Users") ->
 
             # Step 3: Add user to group
             logger.info(f"Adding user {user_pk} to group '{group_name}'...")
-            api.core_groups_add_user_create(group_pk, {"pk": user_pk})
+            user_account_request = UserAccountRequest(pk=user_pk)
+            api.core_groups_add_user_create(group_pk, user_account_request)
 
             logger.info(f"Successfully added user {user_pk} to group '{group_name}'")
             return True
