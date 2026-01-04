@@ -1,57 +1,96 @@
 """TOTP handlers (setup and confirmation)."""
 import logging
+import io
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from bot.utils.config import AUTHENTIK_URL, JELLYFIN_URL
+from bot.services.authentik_api import enroll_totp
 from .auth import TOTP_CONFIRM
 
 logger = logging.getLogger(__name__)
 
 
 async def send_totp_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send TOTP setup instructions and wait for confirmation."""
+    """Send TOTP setup instructions with QR code and wait for confirmation."""
     username = context.user_data.get('username')
+    password = context.user_data.get('password')
+
+    # Send initial message
+    await update.message.reply_text(
+        "🔐 **Setting up Two-Factor Authentication (2FA)**\n\n"
+        "Please wait while I generate your TOTP enrollment...",
+        parse_mode='Markdown'
+    )
+
+    # Enroll TOTP and get QR code
+    logger.info(f"Enrolling TOTP for user {username}...")
+    totp_data = await enroll_totp(username, password)
+
+    if not totp_data or not totp_data.get('qr_code'):
+        # Fallback to manual setup if QR generation fails
+        logger.warning("QR code generation failed, falling back to manual setup")
+        await update.message.reply_text(
+            "⚠️ Automated setup failed. Please set up TOTP manually:\n\n"
+            f"1. Log in to {AUTHENTIK_URL}\n"
+            f"2. Go to {AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/\n"
+            f"3. Follow the instructions to scan the QR code\n"
+            f"4. Type 'done' when finished",
+            parse_mode='Markdown'
+        )
+        return
+
+    # Send QR code
+    config_url = totp_data.get('config_url', '')
+    qr_code_bytes = totp_data.get('qr_code')
 
     totp_instructions = f"""
-🔐 **Set Up Two-Factor Authentication**
-
-Before you can access Jellyfin, you need to set up 2FA (TOTP):
+🔐 **Two-Factor Authentication Setup**
 
 **Step 1: Install an Authenticator App**
-Download this app on your phone:
+Download one of these apps on your phone:
 • Google Authenticator (Android/iOS)
+• Microsoft Authenticator (Android/iOS)
+• Authy (Android/iOS)
 
-**Step 2: Log In to Authentik**
-First, you need to log in to your account:
+**Step 2: Scan the QR Code**
+I'm sending you a QR code below. Open your authenticator app and scan it!
+
+**Step 3: Verify Setup**
+After scanning, you'll need to verify the setup by entering a code from your app.
+
+📱 **Please log in to Authentik to complete the verification:**
 🔗 {AUTHENTIK_URL}
 
-Use these credentials:
-• Username: `{username}`
-• Password: The password you just created
+Username: `{username}`
+Password: The password you created
 
-**Step 3: Enroll Your Authenticator**
-After logging in, click this link to set up TOTP:
-🔗 {AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/
+Then type 'done' below when you've completed the verification.
 
-You'll be asked to:
-1. Scan a QR code with your authenticator app
-2. Enter the 6-digit code to verify it works
-3. The setup is complete!
-
-**Summary:**
-1️⃣ Log in: {AUTHENTIK_URL}
-2️⃣ Set up TOTP: {AUTHENTIK_URL}/if/flow/default-authenticator-totp-setup/
-3️⃣ Type 'done' below when finished
-
-**Important:** Keep your authenticator app safe - you'll need it every time you log in!
+**Important:** Keep your authenticator app safe - you'll need it for every login!
 """
 
     await update.message.reply_text(totp_instructions, parse_mode='Markdown')
 
-    # Ask user to confirm when done
-    await update.message.reply_text(
-        "📱 Once you've completed the 2FA setup, please type 'done' to continue and get your Jellyfin access instructions."
+    # Send QR code as photo
+    await update.message.reply_photo(
+        photo=io.BytesIO(qr_code_bytes),
+        caption="📱 Scan this QR code with your authenticator app"
     )
+
+    # Send manual entry option as fallback
+    # Extract secret from config_url for manual entry
+    manual_entry_text = f"""
+**Alternative: Manual Entry**
+If you can't scan the QR code, you can manually enter these details in your authenticator app:
+
+Account: `{username}`
+Key: Available in the URL above (or scan the QR code)
+Type: Time-based
+
+After setup, please type 'done' to continue.
+"""
+
+    await update.message.reply_text(manual_entry_text, parse_mode='Markdown')
 
 
 async def send_jellyfin_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):

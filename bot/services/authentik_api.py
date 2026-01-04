@@ -1,6 +1,9 @@
 """Authentik API service module."""
 
 import logging
+import io
+import qrcode
+import requests
 import authentik_client
 from authentik_client.rest import ApiException
 from authentik_client.models import UserRequest, UserPasswordSetRequest, UserAccountRequest
@@ -136,3 +139,100 @@ async def add_user_to_group(user_pk: int, group_name: str = "Jellyfin Users") ->
     except Exception as e:
         logger.error(f"Error adding user to group: {str(e)}", exc_info=True)
         return False
+
+
+async def enroll_totp(username: str, password: str) -> dict | None:
+    """
+    Enroll TOTP for a user by executing the enrollment flow.
+    Returns dict with 'config_url' and 'qr_code' (bytes) or None on failure.
+    """
+    try:
+        session = requests.Session()
+
+        # Step 1: Initiate the TOTP enrollment flow
+        logger.info(f"Initiating TOTP enrollment flow for user {username}...")
+        flow_url = f"{AUTHENTIK_URL}/api/v3/flows/executor/default-authenticator-totp-setup/"
+
+        # Get the initial challenge
+        response = session.get(flow_url, timeout=10)
+
+        if response.status_code != 200:
+            logger.error(f"Failed to initiate TOTP flow: {response.status_code} - {response.text}")
+            return None
+
+        challenge_data = response.json()
+        logger.info(f"Flow initiated. Challenge type: {challenge_data.get('type')}")
+
+        # Step 2: Check if we need to authenticate first
+        component = challenge_data.get('component', '')
+
+        if 'identification' in component.lower():
+            # Need to authenticate
+            logger.info("Authenticating user for TOTP enrollment...")
+            auth_response = session.post(
+                flow_url,
+                json={
+                    'component': component,
+                    'uid_field': username,
+                    'password': password
+                },
+                timeout=10
+            )
+
+            if auth_response.status_code != 200:
+                logger.error(f"Authentication failed: {auth_response.status_code} - {auth_response.text}")
+                return None
+
+            challenge_data = auth_response.json()
+            logger.info(f"Authenticated. New component: {challenge_data.get('component')}")
+
+        # Step 3: Look for TOTP stage response
+        # The challenge should now contain the config_url
+        if 'config_url' in challenge_data:
+            config_url = challenge_data['config_url']
+            logger.info(f"Received TOTP config URL")
+
+            # Generate QR code
+            qr_code_bytes = generate_qr_code(config_url)
+
+            return {
+                'config_url': config_url,
+                'qr_code': qr_code_bytes
+            }
+        else:
+            logger.error(f"config_url not found in response. Component: {challenge_data.get('component')}")
+            logger.debug(f"Full response: {challenge_data}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error enrolling TOTP: {str(e)}", exc_info=True)
+        return None
+
+
+def generate_qr_code(data: str) -> bytes:
+    """
+    Generate a QR code image from the given data.
+    Returns the QR code as PNG bytes.
+    """
+    try:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(data)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        # Convert to bytes
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+
+        return img_bytes.getvalue()
+
+    except Exception as e:
+        logger.error(f"Error generating QR code: {str(e)}", exc_info=True)
+        return None
