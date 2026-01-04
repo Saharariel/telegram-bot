@@ -75,8 +75,10 @@ async def create_user(username: str, email: str, password: str) -> dict | None:
 
             logger.info(f"Password set for user: {user_pk}")
 
-            # Return user data as dict
-            return user.to_dict()
+            # Return user data as dict with pk included
+            user_dict = user.to_dict() if hasattr(user, 'to_dict') else {}
+            user_dict['pk'] = user_pk
+            return user_dict
 
     except ApiException as e:
         logger.error(f"API exception creating user: {e}", exc_info=True)
