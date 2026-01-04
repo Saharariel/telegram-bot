@@ -133,9 +133,9 @@ async def add_user_to_group(user_pk: int, group_name: str = "Jellyfin Users") ->
         updated_users = current_users + [user_pk]
         logger.info(f"Adding user {user_pk} to group '{group_name}'...")
 
-        patch_response = requests.patch(
+        patch_response = requests.post(
             f"{AUTHENTIK_URL}/api/v3/core/groups/{group_pk}/",
-            json={"users": updated_users},
+            json={"pk": updated_users},
             headers=AUTHENTIK_HEADERS,
             timeout=10,
         )
