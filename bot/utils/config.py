@@ -23,12 +23,6 @@ CF_API_TOKEN = os.getenv('CF_API_TOKEN')
 CF_ACCOUNT_ID = os.getenv('CF_ACCOUNT_ID')
 CF_ACCESS_POLICY_ID = os.getenv('CF_ACCESS_POLICY_ID')
 
-# Authentik API headers
-AUTHENTIK_HEADERS = {
-    'Authorization': f'Bearer {AUTHENTIK_API_TOKEN}',
-    'Content-Type': 'application/json'
-}
-
 # Debug: Print what was loaded (first few chars only for security)
 logger.info(f"Loaded TELEGRAM_BOT_TOKEN: {'Yes' if TELEGRAM_BOT_TOKEN else 'No'}")
 logger.info(f"Loaded AUTHENTIK_URL: {AUTHENTIK_URL[:30] if AUTHENTIK_URL else 'No'}...")
